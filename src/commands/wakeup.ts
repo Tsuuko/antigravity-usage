@@ -197,7 +197,7 @@ async function configureWakeup(): Promise<void> {
     type: 'input',
     name: 'modelInput',
     message: 'Model IDs to trigger (comma-separated):',
-    default: config.selectedModels.join(', ') || 'gemini-2.0-flash-exp',
+    default: config.selectedModels.join(', ') || 'claude-sonnet-4-5',
     validate: (val: string) => val.trim() ? true : 'At least one model required'
   }])
   config.selectedModels = modelInput.split(',').map((m: string) => m.trim()).filter(Boolean)
@@ -416,7 +416,7 @@ async function runTestTrigger(): Promise<void> {
     type: 'input',
     name: 'modelId',
     message: 'Model ID to test:',
-    default: config?.selectedModels[0] || 'gemini-2.0-flash-exp'
+    default: config?.selectedModels[0] || 'claude-sonnet-4-5'
   }])
   
   // Enter prompt
@@ -448,6 +448,9 @@ async function runTestTrigger(): Promise<void> {
   }
   
   console.log('')
+  
+  // Exit cleanly to avoid hanging on open HTTP connections
+  process.exit(0)
 }
 
 /**

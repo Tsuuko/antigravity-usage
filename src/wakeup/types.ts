@@ -52,7 +52,7 @@ export function getDefaultConfig(): WakeupConfig {
     selectedModels: [],
     selectedAccounts: undefined,
     customPrompt: undefined,
-    maxOutputTokens: 0,
+    maxOutputTokens: 1,               // Minimal tokens to save quota
     scheduleMode: 'interval',
     intervalHours: 6,
     dailyTimes: ['09:00'],
