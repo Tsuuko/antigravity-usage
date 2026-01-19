@@ -100,10 +100,18 @@ export function saveWakeupConfig(config: WakeupConfig): void {
 
 /**
  * Get or create default config
+ * Includes migration logic to update existing configs to new default models
  */
 export function getOrCreateConfig(): WakeupConfig {
   const existing = loadWakeupConfig()
   if (existing) {
+    // Auto-migrate to new default models if selectedModels is empty
+    // This ensures both Claude and Gemini families are triggered
+    if (!existing.selectedModels || existing.selectedModels.length === 0) {
+      existing.selectedModels = ['claude-sonnet-4-5', 'gemini-3-flash']
+      saveWakeupConfig(existing)
+      debug('wakeup-storage', 'Migrated config to new default models')
+    }
     return existing
   }
   const defaultConfig = getDefaultConfig()

@@ -192,15 +192,11 @@ async function configureWakeup(): Promise<void> {
     config.resetCooldownMinutes = resetCooldown
   }
   
-  // Step 4: Select models (simplified - just ask for model IDs)
-  const { modelInput } = await inquirer.prompt([{
-    type: 'input',
-    name: 'modelInput',
-    message: 'Model IDs to trigger (comma-separated):',
-    default: config.selectedModels.join(', ') || 'claude-sonnet-4-5',
-    validate: (val: string) => val.trim() ? true : 'At least one model required'
-  }])
-  config.selectedModels = modelInput.split(',').map((m: string) => m.trim()).filter(Boolean)
+  // Step 4: Models - Use default models that cover both families
+  // claude-sonnet-4-5 triggers Claude family, gemini-3-flash triggers Gemini family
+  config.selectedModels = ['claude-sonnet-4-5', 'gemini-3-flash']
+  console.log('\n   📦 Models: claude-sonnet-4-5, gemini-3-flash')
+  console.log('      (Triggers both Claude and Gemini families)')
   
   // Step 5: Select accounts
   if (accounts.length > 1) {

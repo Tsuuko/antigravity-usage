@@ -45,11 +45,15 @@ export type ScheduleMode = 'interval' | 'daily' | 'weekly' | 'custom'
 
 /**
  * Default configuration
+ * 
+ * Default models trigger both Claude and Gemini families:
+ * - claude-sonnet-4-5: Wakes up Claude family
+ * - gemini-3-flash: Wakes up Gemini family
  */
 export function getDefaultConfig(): WakeupConfig {
   return {
     enabled: false,
-    selectedModels: [],
+    selectedModels: ['claude-sonnet-4-5', 'gemini-3-flash'],
     selectedAccounts: undefined,
     customPrompt: undefined,
     maxOutputTokens: 1,               // Minimal tokens to save quota
