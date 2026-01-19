@@ -107,11 +107,19 @@ Tables automatically adapt to your terminal size, switching between "Compact" an
 Alias for `quota`. Fetches and displays usage data.
 
 ```bash
-antigravity-usage                  # Auto-detect (Local -> Cloud)
-antigravity-usage --all            # Fetch ALL accounts
-antigravity-usage --method local   # Force local IDE connection
+antigravity-usage                   # Auto-detect (Local -> Cloud)
+antigravity-usage --all             # Fetch ALL accounts
+antigravity-usage --method local    # Force local IDE connection
 antigravity-usage --method google   # Force google IDE connection
-antigravity-usage --json           # Output JSON for scripts
+antigravity-usage --json            # Output JSON for scripts
+antigravity-usage --version         # Show version number
+```
+
+### `antigravity-usage --version`
+Display the current version of the CLI tool.
+
+```bash
+antigravity-usage --version  # or -V
 ```
 
 ### `antigravity-usage accounts`
