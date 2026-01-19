@@ -14,33 +14,63 @@ const execAsync = promisify(exec)
 const CRON_COMMENT_MARKER = 'antigravity-usage-wakeup'
 
 /**
- * Get the path to the antigravity-usage binary
+ * Get PATH directories for cron environment
+ * Returns directories where node and npm binaries are found
+ * This makes cron jobs portable across different machines and Node.js installations
  */
-function getBinaryPath(): string {
+function getBinDirectories(): string[] {
+  const dirs = new Set<string>()
+  
   try {
-    // Try to find installed binary using 'which'
-    const path = execSync('which antigravity-usage', { 
+    // Get node's bin directory from current process
+    const nodePath = process.execPath
+    const nodeDir = nodePath.substring(0, nodePath.lastIndexOf('/'))
+    if (nodeDir) {
+      dirs.add(nodeDir)
+      debug('cron-installer', `Found node bin dir: ${nodeDir}`)
+    }
+  } catch {
+    debug('cron-installer', 'Could not determine node bin directory')
+  }
+  
+  try {
+    // Get npm global bin directory
+    const npmBin = execSync('npm bin -g', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe']
     }).trim()
-    
-    if (path) {
-      debug('cron-installer', `Found binary at: ${path}`)
-      return path
+    if (npmBin) {
+      dirs.add(npmBin)
+      debug('cron-installer', `Found npm bin dir: ${npmBin}`)
     }
   } catch {
-    debug('cron-installer', 'Could not find antigravity-usage via which')
+    debug('cron-installer', 'Could not determine npm bin directory')
   }
   
-  // Fallback: use node + script path for development
-  if (process.argv[1]) {
-    const nodePath = process.execPath
-    const scriptPath = process.argv[1]
-    debug('cron-installer', `Using node + script: ${nodePath} ${scriptPath}`)
-    return `${nodePath} ${scriptPath}`
+  // Try to get user's current PATH as fallback
+  // This helps capture paths from nvm, homebrew, etc.
+  if (process.env.PATH) {
+    const userPaths = process.env.PATH.split(':').filter(p => {
+      // Include paths that might contain node or npm binaries
+      return p.includes('node') || p.includes('npm') || 
+             p.includes('nvm') || p.includes('.local') ||
+             p === '/usr/local/bin' || p === '/opt/homebrew/bin'
+    })
+    userPaths.forEach(p => {
+      if (p) {
+        dirs.add(p)
+        debug('cron-installer', `Added user PATH: ${p}`)
+      }
+    })
   }
   
-  throw new Error('Could not determine binary path for cron job')
+  // Add standard system paths (always include these)
+  dirs.add('/usr/local/bin')
+  dirs.add('/usr/bin')
+  dirs.add('/bin')
+  dirs.add('/opt/homebrew/bin') // For Apple Silicon Macs
+  
+  return Array.from(dirs)
 }
 
 /**
@@ -113,17 +143,26 @@ export async function installCronJob(cronExpression: string): Promise<CronInstal
   }
   
   try {
-    const binaryPath = getBinaryPath()
+    // Get PATH directories - auto-detected from current environment
+    // This makes the cron job portable across different machines and Node.js installations
+    const binDirs = getBinDirectories()
+    const pathValue = binDirs.join(':')
     
     // Load existing crontab
     const lines = await loadCrontab()
     
-    // Remove any existing antigravity-usage-wakeup entries
+    // Remove any existing antigravity-usage entries (both PATH and job lines)
     const filteredLines = removeWakeupEntries(lines)
     
-    // Create new cron entry with comment marker
-    const command = `${binaryPath} wakeup trigger --scheduled`
-    const cronLine = `${cronExpression} ${command} # ${CRON_COMMENT_MARKER}`
+    // Add PATH if not already set for other cron jobs
+    const hasPath = filteredLines.some(line => line.startsWith('PATH='))
+    if (!hasPath) {
+      filteredLines.unshift(`PATH=${pathValue}`)
+    }
+    
+    // Create new cron entry with simple, portable command
+    // Using 'antigravity-usage' instead of absolute paths makes it work anywhere
+    const cronLine = `${cronExpression} antigravity-usage wakeup trigger --scheduled # ${CRON_COMMENT_MARKER}`
     
     // Add new entry
     filteredLines.push(cronLine)
@@ -132,6 +171,7 @@ export async function installCronJob(cronExpression: string): Promise<CronInstal
     await saveCrontab(filteredLines)
     
     debug('cron-installer', `Installed cron job: ${cronLine}`)
+    debug('cron-installer', `Using PATH: ${pathValue}`)
     
     return {
       success: true,
@@ -141,13 +181,10 @@ export async function installCronJob(cronExpression: string): Promise<CronInstal
     const errorMessage = err instanceof Error ? err.message : String(err)
     debug('cron-installer', `Failed to install cron job: ${errorMessage}`)
     
-    // Return manual instructions as fallback
-    const binaryPath = tryGetBinaryPath()
-    
     return {
       success: false,
       error: errorMessage,
-      manualInstructions: getManualInstructions(cronExpression, binaryPath)
+      manualInstructions: getManualInstructions(cronExpression)
     }
   }
 }
@@ -233,27 +270,20 @@ export async function getCronStatus(): Promise<CronStatus> {
 }
 
 /**
- * Try to get binary path, return fallback if fails
- */
-function tryGetBinaryPath(): string {
-  try {
-    return getBinaryPath()
-  } catch {
-    return 'antigravity-usage'
-  }
-}
-
-/**
  * Generate manual instructions for cron setup
  */
-function getManualInstructions(cronExpression: string, binaryPath: string): string {
+function getManualInstructions(cronExpression: string): string {
+  const binDirs = getBinDirectories()
+  const pathValue = binDirs.join(':')
+  
   return `
 Failed to automatically install cron job. Please add manually:
 
 1. Open terminal and run: crontab -e
 
-2. Add this line at the end:
-   ${cronExpression} ${binaryPath} wakeup trigger --scheduled # ${CRON_COMMENT_MARKER}
+2. Add these lines:
+   PATH=${pathValue}
+   ${cronExpression} antigravity-usage wakeup trigger --scheduled # ${CRON_COMMENT_MARKER}
 
 3. Save and exit the editor
 
