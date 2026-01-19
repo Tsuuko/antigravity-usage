@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="images/icon.png" alt="antigravity-usage logo" width="150" height="150">
+    <img src="https://raw.githubusercontent.com/skainguyen1412/antigravity-usage/main/images/icon.png" alt="antigravity-usage logo" width="150" height="150">
     <h1>antigravity-usage</h1>
 </div>
 
@@ -20,7 +20,7 @@ A fast, lightweight, and powerful CLI tool to track your Antigravity model quota
 </p>
 
 <div align="center">
-    <img src="images/banner.png" alt="Antigravity Usage Screenshot">
+    <img src="https://raw.githubusercontent.com/skainguyen1412/antigravity-usage/main/images/banner.png" alt="Antigravity Usage Screenshot">
 </div>
 
 
@@ -96,6 +96,16 @@ To keep the CLI snappy and avoid hitting API rate limits:
     antigravity-usage quota --refresh
     ```
 
+### 🤖 Auto Wakeup (macOS & Linux)
+Never waste quota again. Automatically wake up your AI models to maximize your daily limits.
+- **Native Cron Integration**: Schedule-based triggers (every N hours, daily, or custom cron)
+- **Smart Quota-Reset Detection**: Zero-waste mode that detects when quota resets
+- **Multi-Account Support**: Trigger all your accounts simultaneously
+- **Built-in Safety**: Cooldown protection, retry logic, detailed history tracking
+- **Platform Support**: Currently available on **macOS and Linux** (Windows support coming soon)
+
+See the [Wakeup Command](#antigravity-usage-wakeup-) section for full details.
+
 ### 📱 Responsive UI
 Tables automatically adapt to your terminal size, switching between "Compact" and "Spacious" views to show you the most relevant data without wrapping.
 
@@ -141,6 +151,8 @@ Quickly check if your auth tokens are valid or expired.
 ### `antigravity-usage wakeup` 🚀
 **Never waste quota again.** Automatically wake up your AI models at strategic times to maximize your daily limits.
 
+> **Platform Support:** Currently available on **macOS** and **Linux**. Windows support (via Task Scheduler) is coming soon.
+
 ```bash
 antigravity-usage wakeup config     # Interactive setup (takes 30 seconds)
 antigravity-usage wakeup install    # Install to native system cron
@@ -166,12 +178,14 @@ Runs locally on your machine with zero dependencies:
 - **Interval Mode**: Every N hours (e.g., every 6 hours)
 - **Daily Mode**: At specific times (e.g., 9 AM, 5 PM)
 - **Custom Mode**: Advanced cron expressions for power users
+- **Portable Design**: Auto-detects Node.js path for seamless operation across different machines
 
 ```bash
 antigravity-usage wakeup install
-# ✅ Installs to your system's native crontab
+# ✅ Installs to your system's native crontab (macOS/Linux)
 # ✅ Runs even when terminal/antigravity is closed
 # ✅ Persists across reboots
+# ✅ Works on any machine with Node.js installed
 ```
 
 **2. Smart Quota-Reset Detection** (Zero-Waste Mode)
