@@ -44,17 +44,33 @@ async function detectOnUnix(): Promise<AntigravityProcessInfo | null> {
     const lines = stdout.split('\n')
     
     for (const line of lines) {
-      // Look for language server process indicators
-      // Common patterns: antigravity, language-server, lsp
-      if (line.toLowerCase().includes('antigravity') && 
-          (line.includes('language-server') || line.includes('lsp') || line.includes('server'))) {
-        
-        debug('process-detector', `Found potential Antigravity process: ${line}`)
-        
-        const processInfo = parseUnixProcessLine(line)
-        if (processInfo) {
-          return processInfo
-        }
+      const lower = line.toLowerCase()
+      if (!lower.includes('antigravity')) {
+        continue
+      }
+
+      // Ignore remote server install scripts that contain broad "server" terms
+      // but are not the language server process.
+      if (lower.includes('server installation script')) {
+        continue
+      }
+
+      const hasServerSignal =
+        line.includes('language-server') ||
+        line.includes('lsp') ||
+        line.includes('--csrf_token') ||
+        line.includes('--extension_server_port') ||
+        line.includes('exa.language_server_pb')
+
+      if (!hasServerSignal) {
+        continue
+      }
+
+      debug('process-detector', `Found potential Antigravity process: ${line}`)
+
+      const processInfo = parseUnixProcessLine(line)
+      if (processInfo) {
+        return processInfo
       }
     }
     

@@ -107,8 +107,13 @@ async function fetchQuotaLocal(): Promise<QuotaSnapshot> {
   debug('service', `Found Antigravity process: PID ${processInfo.pid}`)
   
   // Step 2: Discover all listening ports (to find the connect port, not extension_server_port)
-  const ports = await discoverPorts(processInfo.pid)
-  
+  let ports = await discoverPorts(processInfo.pid)
+
+  if (ports.length === 0 && processInfo.extensionServerPort) {
+    debug('service', `Falling back to extension_server_port: ${processInfo.extensionServerPort}`)
+    ports = [processInfo.extensionServerPort]
+  }
+
   if (ports.length === 0) {
     throw new PortDetectionError()
   }
