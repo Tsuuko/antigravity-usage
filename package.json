@@ -1,6 +1,6 @@
 {
   "name": "antigravity-usage",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "CLI tool to check Antigravity model quota via Google Cloud Code API",
   "type": "module",
   "main": "dist/index.js",
