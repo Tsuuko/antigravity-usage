@@ -1,6 +1,13 @@
 {
-  "name": "antigravity-usage",
+  "name": "@tsuuko/antigravity-usage",
   "version": "0.2.9",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tsuuko/antigravity-usage.git"
+  },
   "description": "CLI tool to check Antigravity model quota via Google Cloud Code API",
   "type": "module",
   "main": "dist/index.js",
