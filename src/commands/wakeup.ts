@@ -55,32 +55,32 @@ export async function wakeupCommand(
   options: WakeupOptions
 ): Promise<void> {
   debug('wakeup', `Subcommand: ${subcommand}, options:`, options)
-  
+
   switch (subcommand) {
     case 'config':
       await configureWakeup()
       break
-    
+
     case 'trigger':
       await runScheduledTrigger(options.scheduled ?? false)
       break
-    
+
     case 'install':
       await installSchedule()
       break
-    
+
     case 'uninstall':
       await uninstallSchedule()
       break
-    
+
     case 'test':
       await runTestTrigger()
       break
-    
+
     case 'history':
       await showHistory(options)
       break
-    
+
     case 'status':
     default:
       await showStatus()
@@ -97,17 +97,17 @@ export async function wakeupCommand(
  */
 async function configureWakeup(): Promise<void> {
   console.log('\n🔧 Auto Wake-up Configuration\n')
-  
+
   const config = getOrCreateConfig()
   const accountManager = getAccountManager()
   const accounts = accountManager.getAccountEmails()
-  
+
   if (accounts.length === 0) {
     console.log('❌ No accounts available. Please login first:')
     console.log('   antigravity-usage login\n')
     return
   }
-  
+
   // Step 1: Enable/disable
   const { enabled } = await inquirer.prompt([{
     type: 'confirm',
@@ -115,14 +115,14 @@ async function configureWakeup(): Promise<void> {
     message: 'Enable auto wake-up?',
     default: config.enabled
   }])
-  
+
   if (!enabled) {
     config.enabled = false
     saveWakeupConfig(config)
     console.log('\n✅ Auto wake-up disabled')
     return
   }
-  
+
   // Step 2: Choose trigger mode
   const { triggerMode } = await inquirer.prompt([{
     type: 'list',
@@ -134,9 +134,9 @@ async function configureWakeup(): Promise<void> {
     ],
     default: config.wakeOnReset ? 'reset' : 'schedule'
   }])
-  
+
   config.wakeOnReset = triggerMode === 'reset'
-  
+
   // Step 3: Configure schedule (if schedule mode)
   if (!config.wakeOnReset) {
     const { scheduleMode } = await inquirer.prompt([{
@@ -150,9 +150,9 @@ async function configureWakeup(): Promise<void> {
       ],
       default: config.scheduleMode
     }])
-    
+
     config.scheduleMode = scheduleMode
-    
+
     if (scheduleMode === 'interval') {
       const { intervalHours } = await inquirer.prompt([{
         type: 'number',
@@ -191,14 +191,14 @@ async function configureWakeup(): Promise<void> {
     }])
     config.resetCooldownMinutes = resetCooldown
   }
-  
+
   // Step 4: Models - Use default models that cover both families
-  // claude-sonnet-4-5 triggers Claude family
+  // claude-sonnet-4-6 triggers Claude family
   // gemini-3-flash and gemini-3.1-pro-low trigger both Gemini quota groups
-  config.selectedModels = ['claude-sonnet-4-5', 'gemini-3-flash', 'gemini-3.1-pro-low']
-  console.log('\n   📦 Models: claude-sonnet-4-5, gemini-3-flash, gemini-3.1-pro-low')
+  config.selectedModels = ['claude-sonnet-4-6', 'gemini-3-flash', 'gemini-3.1-pro-low']
+  console.log('\n   📦 Models: claude-sonnet-4-6, gemini-3-flash, gemini-3.1-pro-low')
   console.log('      (Triggers both Claude and Gemini families)')
-  
+
   // Step 5: Select accounts
   if (accounts.length > 1) {
     const { selectedAccounts } = await inquirer.prompt([{
@@ -215,7 +215,7 @@ async function configureWakeup(): Promise<void> {
   } else {
     config.selectedAccounts = undefined // Use default (active account)
   }
-  
+
   // Step 6: Custom prompt (optional)
   const { customPrompt } = await inquirer.prompt([{
     type: 'input',
@@ -224,7 +224,7 @@ async function configureWakeup(): Promise<void> {
     default: config.customPrompt || ''
   }])
   config.customPrompt = customPrompt || undefined
-  
+
   // Step 7: Max output tokens
   const { maxTokens } = await inquirer.prompt([{
     type: 'number',
@@ -233,16 +233,16 @@ async function configureWakeup(): Promise<void> {
     default: config.maxOutputTokens || 0
   }])
   config.maxOutputTokens = maxTokens
-  
+
   // Save config
   config.enabled = true
   saveWakeupConfig(config)
-  
+
   console.log('\n✅ Configuration saved!')
   console.log(`   Mode: ${getScheduleDescription(config)}`)
   console.log(`   Models: ${config.selectedModels.join(', ')}`)
   console.log(`   Accounts: ${config.selectedAccounts?.join(', ') || 'Active account'}`)
-  
+
   // Offer to install cron job if schedule mode
   if (!config.wakeOnReset && isCronSupported()) {
     const { installNow } = await inquirer.prompt([{
@@ -251,7 +251,7 @@ async function configureWakeup(): Promise<void> {
       message: 'Install to system cron now?',
       default: true
     }])
-    
+
     if (installNow) {
       await installSchedule()
     } else {
@@ -259,7 +259,7 @@ async function configureWakeup(): Promise<void> {
       console.log('   antigravity-usage wakeup install')
     }
   }
-  
+
   console.log('')
 }
 
@@ -268,25 +268,25 @@ async function configureWakeup(): Promise<void> {
  */
 async function runScheduledTrigger(isScheduled: boolean): Promise<void> {
   debug('wakeup', `Running trigger (scheduled: ${isScheduled})`)
-  
+
   const config = loadWakeupConfig()
-  
+
   if (!config || !config.enabled) {
     debug('wakeup', 'Wakeup not configured or disabled')
     return
   }
-  
+
   const accounts = resolveAccounts(config.selectedAccounts)
   if (accounts.length === 0) {
     debug('wakeup', 'No valid accounts')
     return
   }
-  
+
   if (config.selectedModels.length === 0) {
     debug('wakeup', 'No models selected')
     return
   }
-  
+
   // Execute trigger for each account
   for (const accountEmail of accounts) {
     const result = await executeTrigger({
@@ -297,7 +297,7 @@ async function runScheduledTrigger(isScheduled: boolean): Promise<void> {
       customPrompt: config.customPrompt,
       maxOutputTokens: config.maxOutputTokens
     })
-    
+
     const successCount = result.results.filter(r => r.success).length
     console.log(`[${new Date().toISOString()}] ${accountEmail}: ${successCount}/${result.results.length} models triggered`)
   }
@@ -308,41 +308,41 @@ async function runScheduledTrigger(isScheduled: boolean): Promise<void> {
  */
 async function installSchedule(): Promise<void> {
   console.log('\n📅 Installing wake-up schedule to cron...\n')
-  
+
   if (!isCronSupported()) {
     console.log('❌ Cron is not supported on this platform.')
     console.log('   Windows Task Scheduler support coming soon.')
     return
   }
-  
+
   const config = loadWakeupConfig()
-  
+
   if (!config) {
     console.log('❌ No wake-up configuration found.')
     console.log('   Run: antigravity-usage wakeup config')
     return
   }
-  
+
   if (!config.enabled) {
     console.log('❌ Wake-up is disabled. Enable it first:')
     console.log('   antigravity-usage wakeup config')
     return
   }
-  
+
   if (config.wakeOnReset) {
     console.log('ℹ️  Quota-reset mode does not require cron installation.')
     console.log('   Triggers happen automatically when you check quota.')
     return
   }
-  
+
   try {
     const cronExpression = configToCronExpression(config)
     console.log(`   Schedule: ${getScheduleDescription(config)}`)
     console.log(`   Cron: ${cronExpression}`)
     console.log('')
-    
+
     const result = await installCronJob(cronExpression)
-    
+
     if (result.success) {
       console.log('✅ Cron job installed successfully!')
       console.log(`   Next run: ${getNextRunEstimate(cronExpression)}`)
@@ -359,7 +359,7 @@ async function installSchedule(): Promise<void> {
   } catch (err) {
     console.log(`❌ Error: ${err instanceof Error ? err.message : err}`)
   }
-  
+
   console.log('')
 }
 
@@ -368,16 +368,16 @@ async function installSchedule(): Promise<void> {
  */
 async function uninstallSchedule(): Promise<void> {
   console.log('\n🗑️  Removing wake-up schedule from cron...\n')
-  
+
   const success = await uninstallCronJob()
-  
+
   if (success) {
     console.log('✅ Cron job removed successfully!')
   } else {
     console.log('⚠️  Could not remove cron job. It may not be installed.')
     console.log('   Check your crontab: crontab -l')
   }
-  
+
   console.log('')
 }
 
@@ -386,15 +386,15 @@ async function uninstallSchedule(): Promise<void> {
  */
 async function runTestTrigger(): Promise<void> {
   console.log('\n🧪 Test Trigger\n')
-  
+
   const accountManager = getAccountManager()
   const accounts = accountManager.getAccountEmails()
-  
+
   if (accounts.length === 0) {
     console.log('❌ No accounts available. Please login first.')
     return
   }
-  
+
   // Select account
   let accountEmail = accounts[0]
   if (accounts.length > 1) {
@@ -406,16 +406,16 @@ async function runTestTrigger(): Promise<void> {
     }])
     accountEmail = selectedAccount
   }
-  
+
   // Enter model ID
   const config = loadWakeupConfig()
   const { modelId } = await inquirer.prompt([{
     type: 'input',
     name: 'modelId',
     message: 'Model ID to test:',
-    default: config?.selectedModels[0] || 'claude-sonnet-4-5'
+    default: config?.selectedModels[0] || 'claude-sonnet-4-6'
   }])
-  
+
   // Enter prompt
   const { prompt } = await inquirer.prompt([{
     type: 'input',
@@ -423,12 +423,12 @@ async function runTestTrigger(): Promise<void> {
     message: 'Test prompt:',
     default: 'hi'
   }])
-  
+
   console.log('\n⏳ Triggering...')
-  
+
   try {
     const result = await testTrigger(modelId, accountEmail, prompt)
-    
+
     if (result.success) {
       console.log(`\n✅ Success! (${result.durationMs}ms)`)
       if (result.response) {
@@ -443,9 +443,9 @@ async function runTestTrigger(): Promise<void> {
   } catch (err) {
     console.log(`\n❌ Error: ${err instanceof Error ? err.message : err}`)
   }
-  
+
   console.log('')
-  
+
   // Exit cleanly to avoid hanging on open HTTP connections
   process.exit(0)
 }
@@ -456,28 +456,28 @@ async function runTestTrigger(): Promise<void> {
 async function showHistory(options: WakeupOptions): Promise<void> {
   const limit = parseInt(options.limit || '10', 10)
   const history = getRecentHistory(limit)
-  
+
   if (history.length === 0) {
     console.log('\n📜 No trigger history yet.\n')
     return
   }
-  
+
   if (options.json) {
     console.log(JSON.stringify(history, null, 2))
     return
   }
-  
+
   console.log(`\n📜 Trigger History (last ${Math.min(limit, history.length)} records)\n`)
-  
+
   const table = new Table({
     head: ['Time', 'Source', 'Model', 'Account', 'Duration', 'Status'],
     style: { head: ['cyan'] }
   })
-  
+
   for (const record of history) {
     const time = new Date(record.timestamp).toLocaleString()
     const status = record.success ? '✅' : `❌ ${record.error?.substring(0, 20) || ''}`
-    
+
     table.push([
       time,
       record.triggerSource,
@@ -487,7 +487,7 @@ async function showHistory(options: WakeupOptions): Promise<void> {
       status
     ])
   }
-  
+
   console.log(table.toString())
   console.log('')
 }
@@ -497,9 +497,9 @@ async function showHistory(options: WakeupOptions): Promise<void> {
  */
 async function showStatus(): Promise<void> {
   console.log('\n📊 Auto Wake-up Status\n')
-  
+
   const config = loadWakeupConfig()
-  
+
   if (!config) {
     console.log('   Status: Not configured')
     console.log('')
@@ -507,21 +507,21 @@ async function showStatus(): Promise<void> {
     console.log('')
     return
   }
-  
+
   // Basic status
   console.log(`   Enabled: ${config.enabled ? '✅ Yes' : '❌ No'}`)
   console.log(`   Mode: ${getScheduleDescription(config)}`)
-  
+
   // Models
   if (config.selectedModels.length > 0) {
     console.log(`   Models: ${config.selectedModels.join(', ')}`)
   } else {
     console.log('   Models: None selected')
   }
-  
+
   // Accounts
   console.log(`   Accounts: ${getAccountResolutionStatus(config.selectedAccounts)}`)
-  
+
   // Cron status (for schedule mode)
   if (!config.wakeOnReset && config.enabled) {
     const cronStatus = await getCronStatus()
@@ -535,7 +535,7 @@ async function showStatus(): Promise<void> {
       console.log('         Run: antigravity-usage wakeup install')
     }
   }
-  
+
   // Last trigger
   const lastTrigger = getLastTrigger()
   if (lastTrigger) {
@@ -545,7 +545,7 @@ async function showStatus(): Promise<void> {
   } else {
     console.log('   Last trigger: Never')
   }
-  
+
   console.log('')
 }
 
@@ -554,7 +554,7 @@ async function showStatus(): Promise<void> {
  */
 function getTimeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  
+
   if (seconds < 60) return 'Just now'
   if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`

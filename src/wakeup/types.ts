@@ -17,14 +17,14 @@ export interface WakeupConfig {
   selectedAccounts?: string[]        // Account emails (undefined = use active)
   customPrompt?: string              // Optional custom wake-up prompt
   maxOutputTokens: number            // 0 = no limit
-  
+
   // Schedule-based mode
   scheduleMode: ScheduleMode
   intervalHours?: number             // For interval mode (e.g., 6 = every 6 hours)
   dailyTimes?: string[]              // For daily mode: ["09:00", "17:00"]
   weeklySchedule?: WeeklySchedule    // For weekly mode
   cronExpression?: string            // For custom mode (advanced users)
-  
+
   // Quota-reset mode
   wakeOnReset: boolean               // Enable quota-reset-based triggering
   resetCooldownMinutes: number       // Cooldown between reset triggers (default: 10)
@@ -45,16 +45,16 @@ export type ScheduleMode = 'interval' | 'daily' | 'weekly' | 'custom'
 
 /**
  * Default configuration
- * 
+ *
  * Default models trigger both Claude and Gemini families:
- * - claude-sonnet-4-5: Wakes up Claude family
+ * - claude-sonnet-4-6: Wakes up Claude family
  * - gemini-3-flash: Wakes up Gemini flash quota group
  * - gemini-3.1-pro-low: Wakes up Gemini pro quota group
  */
 export function getDefaultConfig(): WakeupConfig {
   return {
     enabled: false,
-    selectedModels: ['claude-sonnet-4-5', 'gemini-3-flash', 'gemini-3.1-pro-low'],
+    selectedModels: ['claude-sonnet-4-6', 'gemini-3-flash', 'gemini-3.1-pro-low'],
     selectedAccounts: undefined,
     customPrompt: undefined,
     maxOutputTokens: 1,               // Minimal tokens to save quota

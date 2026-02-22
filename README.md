@@ -183,7 +183,7 @@ Your Antigravity quota resets every ~5 hours, but if you don't use it, you lose 
 
 #### 🎯 Intelligent Model Selection
 Zero configuration needed. Automatically wakes up:
-- **`claude-sonnet-4-5`** → Triggers the entire Claude family
+- **`claude-sonnet-4-6`** → Triggers the entire Claude family
 - **`gemini-3-flash`** → Triggers Gemini flash quota group
 - **`gemini-3.1-pro-low`** → Triggers Gemini pro quota group
 

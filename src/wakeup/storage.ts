@@ -7,11 +7,11 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { debug } from '../core/logger.js'
 import { getConfigDir } from '../core/env.js'
-import type { 
-  WakeupConfig, 
-  TriggerRecord, 
+import type {
+  WakeupConfig,
+  TriggerRecord,
   ResetState,
-  ModelMapping 
+  ModelMapping
 } from './types.js'
 import { getDefaultConfig } from './types.js'
 
@@ -108,7 +108,7 @@ export function getOrCreateConfig(): WakeupConfig {
     // Auto-migrate to new default models if selectedModels is empty
     // This ensures both Claude and Gemini families (both quota groups) are triggered
     if (!existing.selectedModels || existing.selectedModels.length === 0) {
-      existing.selectedModels = ['claude-sonnet-4-5', 'gemini-3-flash', 'gemini-3.1-pro-low']
+      existing.selectedModels = ['claude-sonnet-4-6', 'gemini-3-flash', 'gemini-3.1-pro-low']
       saveWakeupConfig(existing)
       debug('wakeup-storage', 'Migrated config to new default models')
     }
@@ -142,15 +142,15 @@ export function saveTriggerHistory(history: TriggerRecord[]): void {
  */
 export function addTriggerRecord(record: TriggerRecord): void {
   const history = loadTriggerHistory()
-  
+
   // Add new record at the beginning
   history.unshift(record)
-  
+
   // Trim to max entries
   if (history.length > MAX_HISTORY_ENTRIES) {
     history.splice(MAX_HISTORY_ENTRIES)
   }
-  
+
   saveTriggerHistory(history)
   debug('wakeup-storage', `Added trigger record (total: ${history.length})`)
 }
@@ -202,12 +202,12 @@ export function saveResetState(state: ResetState): void {
  */
 export function updateResetState(modelKey: string, resetAt: string): void {
   const state = loadResetState()
-  
+
   state[modelKey] = {
     lastResetAt: resetAt,
     lastTriggeredTime: new Date().toISOString()
   }
-  
+
   saveResetState(state)
   debug('wakeup-storage', `Updated reset state for ${modelKey}`)
 }
