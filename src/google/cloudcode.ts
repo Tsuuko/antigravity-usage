@@ -13,7 +13,7 @@ const BASE_URLS = [
   'https://daily-cloudcode-pa.sandbox.googleapis.com'
 ]
 const BASE_URL = BASE_URLS[0]  // Default for non-trigger API calls
-const USER_AGENT = 'antigravity'
+const USER_AGENT = 'antigravity/1.18.4 windows/amd64'
 
 // Retry configuration (matching example.ts)
 const MAX_TRIGGER_ATTEMPTS = 3
@@ -337,7 +337,7 @@ export class CloudCodeClient {
     const body: Record<string, unknown> = {
       requestId,
       model: modelId,
-      userAgent: 'antigravity',
+      userAgent: 'antigravity/1.18.4 windows/amd64',
       requestType: 'agent',
       request: {
         contents: [{
