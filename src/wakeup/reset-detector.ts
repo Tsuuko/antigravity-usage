@@ -4,34 +4,26 @@
  * Smart trigger logic:
  * - Triggers ALL available models from quota snapshot
  * - Triggers for ALL valid accounts
- * - Only triggers when model is "unused": 100% remaining AND resetTime has changed since last trigger
+ * - Only triggers when model is "unused": 100% remaining AND resetTime has changed since last cached snapshot
  */
 
 import { debug } from '../core/logger.js'
 import type { QuotaSnapshot, ModelQuotaInfo } from '../quota/types.js'
-import {
-  loadWakeupConfig,
-  loadResetState,
-  updateResetState,
-  getResetKey
-} from './storage.js'
+import { loadWakeupConfig } from './storage.js'
 import { getAccountManager } from '../accounts/manager.js'
 import { executeTrigger } from './trigger-service.js'
-import type { DetectionResult, ResetState } from './types.js'
+import type { DetectionResult } from './types.js'
 
 // Smart trigger thresholds
-const FULL_QUOTA_THRESHOLD = 99        // Consider "full" if >= 99%
-
-// Cooldown between triggers for same model
-// Default to 10 minutes (matching default config resetCooldownMinutes)
-const DEFAULT_COOLDOWN_MS = 10 * 60 * 1000
+// Note: remainingPercentage is actually a fraction (0-1), not a percentage (0-100)
+const FULL_QUOTA_THRESHOLD = 0.99        // Consider "full" if >= 99%
 
 /**
- * Check if a model is "unused" and should be triggered based on its reset state
+ * Check if a model is "unused" and should be triggered based on previous cache data
  *
- * Unused = 100% quota remaining AND resetTime is different from the last time we triggered it
+ * Unused = 100% quota remaining AND resetTime is different from the previous cached snapshot
  */
-export function isModelUnused(model: ModelQuotaInfo, resetState: ResetState): boolean {
+export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnapshot | null): boolean {
   // Must have remaining percentage data
   if (model.remainingPercentage === undefined) {
     debug('reset-detector', `${model.modelId}: No remaining percentage data`)
@@ -40,7 +32,7 @@ export function isModelUnused(model: ModelQuotaInfo, resetState: ResetState): bo
 
   // Check if quota is full (100% or very close)
   if (model.remainingPercentage < FULL_QUOTA_THRESHOLD) {
-    debug('reset-detector', `${model.modelId}: Not full (${model.remainingPercentage}%)`)
+    debug('reset-detector', `${model.modelId}: Not full (${model.remainingPercentage})`)
     return false
   }
 
@@ -50,22 +42,28 @@ export function isModelUnused(model: ModelQuotaInfo, resetState: ResetState): bo
     return false
   }
 
-  const resetKey = getResetKey(model.modelId)
-  const previousState = resetState[resetKey]
-
-  // If we have never triggered this model before, it's considered unused and ready to trigger
-  if (!previousState || !previousState.lastResetAt) {
-    debug('reset-detector', `${model.modelId}: UNUSED - No previous reset state found`)
+  // If no previous snapshot exists, this is the first run - trigger
+  if (!previousSnapshot) {
+    debug('reset-detector', `${model.modelId}: UNUSED - No previous snapshot (first run)`)
     return true
   }
 
-  // Compare the API's resetTime with the one we saved last time we triggered
-  if (model.resetTime === previousState.lastResetAt) {
+  // Find the same model in the previous snapshot
+  const previousModel = previousSnapshot.models.find(m => m.modelId === model.modelId)
+
+  // If model wasn't in previous snapshot, it's new - trigger
+  if (!previousModel) {
+    debug('reset-detector', `${model.modelId}: UNUSED - Model not in previous snapshot`)
+    return true
+  }
+
+  // Compare resetTime: if changed, the quota cycle has reset
+  if (model.resetTime === previousModel.resetTime) {
     debug('reset-detector', `${model.modelId}: Reset time unchanged (${model.resetTime})`)
     return false
   }
 
-  debug('reset-detector', `${model.modelId}: UNUSED - Reset time changed (old: ${previousState.lastResetAt}, new: ${model.resetTime})`)
+  debug('reset-detector', `${model.modelId}: UNUSED - Reset time changed (old: ${previousModel.resetTime}, new: ${model.resetTime})`)
   return true
 }
 
@@ -85,12 +83,14 @@ function getAllValidAccounts(): string[] {
 /**
  * Detect unused models and trigger wake-up for all accounts
  *
- * New smart logic:
- * 1. Check ALL models in the quota snapshot
- * 2. Find models that are "unused" (100% + resetTime changed)
- * 3. Trigger for ALL valid accounts
+ * Compares the new snapshot against the previous cached snapshot to detect resets.
+ * @param snapshot - The newly fetched quota snapshot
+ * @param previousSnapshot - The previous cached snapshot (from cache.json), or null if first run
  */
-export async function detectResetAndTrigger(snapshot: QuotaSnapshot): Promise<DetectionResult> {
+export async function detectResetAndTrigger(
+  snapshot: QuotaSnapshot,
+  previousSnapshot: QuotaSnapshot | null
+): Promise<DetectionResult> {
   debug('reset-detector', 'Checking for unused models (smart trigger)')
 
   // Load config
@@ -111,47 +111,29 @@ export async function detectResetAndTrigger(snapshot: QuotaSnapshot): Promise<De
 
   debug('reset-detector', `Found ${accounts.length} valid accounts`)
 
-  // Load reset state for deduplication and cooldown
-  const resetState = loadResetState()
-  const now = Date.now()
-  const cooldownMs = (config.resetCooldownMinutes || 10) * 60 * 1000
+  // Filter to only selected models
+  const selectedSet = new Set(config.selectedModels)
+  const targetModels = snapshot.models.filter(m => selectedSet.has(m.modelId))
 
-  // Find ALL unused models (check every model in snapshot)
+  debug('reset-detector', `Checking ${targetModels.length} selected models out of ${snapshot.models.length} total`)
+
+  // Find unused models by comparing with previous snapshot
   const modelsToTrigger: string[] = []
+  const seenModelIds = new Set<string>()
 
-  // Use a map to track which models we're actually triggering to avoid duplicates if
-  // multiple modelIds map to the same resetKey
-  const triggeredResetKeys = new Set<string>()
-
-  for (const model of snapshot.models) {
-    const resetKey = getResetKey(model.modelId)
-
-    // Check if model is unused
-    if (!isModelUnused(model, resetState)) {
+  for (const model of targetModels) {
+    // Skip duplicates
+    if (seenModelIds.has(model.modelId)) {
       continue
     }
 
-    // Skip if we already decided to trigger this reset family in this loop
-    if (triggeredResetKeys.has(resetKey)) {
+    // Check if model is unused (resetTime changed from cached version)
+    if (!isModelUnused(model, previousSnapshot)) {
       continue
-    }
-
-    // Check cooldown (don't trigger same model too frequently)
-    const previousState = resetState[resetKey]
-    if (previousState) {
-      const lastTriggered = new Date(previousState.lastTriggeredTime).getTime()
-      const cooldownRemaining = cooldownMs - (now - lastTriggered)
-      if (cooldownRemaining > 0) {
-        debug('reset-detector', `${model.modelId}: In cooldown (${Math.round(cooldownRemaining / 60000)}min remaining)`)
-        continue
-      }
     }
 
     modelsToTrigger.push(model.modelId)
-    triggeredResetKeys.add(resetKey)
-
-    // Update state to prevent re-triggering
-    updateResetState(resetKey, model.resetTime || new Date().toISOString())
+    seenModelIds.add(model.modelId)
   }
 
   if (modelsToTrigger.length === 0) {
@@ -195,15 +177,13 @@ export async function detectResetAndTrigger(snapshot: QuotaSnapshot): Promise<De
 /**
  * Get list of unused models for display/testing
  */
-export function findUnusedModels(snapshot: QuotaSnapshot): ModelQuotaInfo[] {
-  const resetState = loadResetState()
-  return snapshot.models.filter(m => isModelUnused(m, resetState))
+export function findUnusedModels(snapshot: QuotaSnapshot, previousSnapshot: QuotaSnapshot | null = null): ModelQuotaInfo[] {
+  return snapshot.models.filter(m => isModelUnused(m, previousSnapshot))
 }
 
 /**
  * Check if any models need triggering (for status display)
  */
-export function hasUnusedModels(snapshot: QuotaSnapshot): boolean {
-  const resetState = loadResetState()
-  return snapshot.models.some(m => isModelUnused(m, resetState))
+export function hasUnusedModels(snapshot: QuotaSnapshot, previousSnapshot: QuotaSnapshot | null = null): boolean {
+  return snapshot.models.some(m => isModelUnused(m, previousSnapshot))
 }

@@ -27,7 +27,6 @@ export interface WakeupConfig {
 
   // Quota-reset mode
   wakeOnReset: boolean               // Enable quota-reset-based triggering
-  resetCooldownMinutes: number       // Cooldown between reset triggers (default: 10)
 }
 
 /**
@@ -63,8 +62,7 @@ export function getDefaultConfig(): WakeupConfig {
     dailyTimes: ['09:00'],
     weeklySchedule: {},
     cronExpression: undefined,
-    wakeOnReset: false,
-    resetCooldownMinutes: 10
+    wakeOnReset: false
   }
 }
 
@@ -109,37 +107,6 @@ export interface TriggerRecord {
 }
 
 // ============================================================================
-// Reset Detection State
-// ============================================================================
-
-/**
- * State for a single model's reset tracking
- */
-export interface ModelResetState {
-  lastResetAt: string                // Last resetAt timestamp we triggered for
-  lastTriggeredTime: string          // When we last triggered (ISO timestamp)
-}
-
-/**
- * Reset deduplication state - keyed by model reset key
- * Key is modelConstant if available, otherwise modelId
- */
-export interface ResetState {
-  [modelResetKey: string]: ModelResetState
-}
-
-// ============================================================================
-// Model Mapping
-// ============================================================================
-
-/**
- * Mapping from model ID to model constant
- * Used for quota reset deduplication
- */
-export interface ModelMapping {
-  [modelId: string]: string
-}
-
 // ============================================================================
 // Trigger Service Types
 // ============================================================================

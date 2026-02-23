@@ -11,10 +11,13 @@ import {
   getRecentHistory,
   getLastTrigger,
   clearTriggerHistory,
+  detectResetAndTrigger,
   type WakeupConfig,
   type TriggerRecord,
   getDefaultConfig
 } from '../wakeup/index.js'
+import { fetchQuota } from '../quota/service.js'
+import { loadCache, saveCache } from '../accounts/index.js'
 import {
   installCronJob,
   uninstallCronJob,
@@ -181,15 +184,8 @@ async function configureWakeup(): Promise<void> {
       config.cronExpression = cronExpression
     }
   } else {
-    // Reset mode configuration
-    const { resetCooldown } = await inquirer.prompt([{
-      type: 'number',
-      name: 'resetCooldown',
-      message: 'Cooldown between triggers (minutes):',
-      default: config.resetCooldownMinutes || 10,
-      validate: (val: number) => val >= 1 ? true : 'Must be at least 1 minute'
-    }])
-    config.resetCooldownMinutes = resetCooldown
+    // Reset mode - no additional configuration needed
+    // Deduplication is handled by cache.json resetTime comparison
   }
 
   // Step 4: Models - Use default models that cover both families
@@ -243,8 +239,8 @@ async function configureWakeup(): Promise<void> {
   console.log(`   Models: ${config.selectedModels.join(', ')}`)
   console.log(`   Accounts: ${config.selectedAccounts?.join(', ') || 'Active account'}`)
 
-  // Offer to install cron job if schedule mode
-  if (!config.wakeOnReset && isCronSupported()) {
+  // Offer to install cron job
+  if (isCronSupported()) {
     const { installNow } = await inquirer.prompt([{
       type: 'confirm',
       name: 'installNow',
@@ -276,6 +272,34 @@ async function runScheduledTrigger(isScheduled: boolean): Promise<void> {
     return
   }
 
+  // Quota-reset mode: use detectResetAndTrigger with quota snapshot
+  if (config.wakeOnReset) {
+    debug('wakeup', 'Using quota-reset mode: fetching quota and detecting resets')
+    try {
+      // Load previous cache for comparison
+      const accountManager = getAccountManager()
+      const activeEmail = accountManager.getActiveEmail()
+      const previousSnapshot = activeEmail ? loadCache(activeEmail) : null
+
+      const snapshot = await fetchQuota('google')
+
+      // Save new cache
+      if (activeEmail) {
+        saveCache(activeEmail, snapshot)
+      }
+
+      const result = await detectResetAndTrigger(snapshot, previousSnapshot)
+      if (!result.triggered) {
+        debug('wakeup', 'No models needed triggering')
+      }
+    } catch (err) {
+      console.log(`❌ Error fetching quota for reset detection: ${err instanceof Error ? err.message : err}`)
+      debug('wakeup', 'Failed to fetch quota for reset detection:', err)
+    }
+    return
+  }
+
+  // Scheduled mode: trigger selected models directly
   const accounts = resolveAccounts(config.selectedAccounts)
   if (accounts.length === 0) {
     debug('wakeup', 'No valid accounts')
@@ -329,16 +353,13 @@ async function installSchedule(): Promise<void> {
     return
   }
 
-  if (config.wakeOnReset) {
-    console.log('ℹ️  Quota-reset mode does not require cron installation.')
-    console.log('   Triggers happen automatically when you check quota.')
-    return
-  }
-
+  // For quota-reset mode, use a fixed 1-hour interval
+  // For schedule mode, use the configured cron expression
+  const cronExpression = config.wakeOnReset ? '0 */1 * * *' : configToCronExpression(config)
+  const description = config.wakeOnReset ? 'Every 1 hour (quota-reset check)' : getScheduleDescription(config)
+  console.log(`   Schedule: ${description}`)
+  console.log(`   Cron: ${cronExpression}`)
   try {
-    const cronExpression = configToCronExpression(config)
-    console.log(`   Schedule: ${getScheduleDescription(config)}`)
-    console.log(`   Cron: ${cronExpression}`)
     console.log('')
 
     const result = await installCronJob(cronExpression)

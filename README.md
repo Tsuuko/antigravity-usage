@@ -89,9 +89,10 @@ By default, `antigravity-usage` runs in **Auto Mode**, seamlessly switching betw
 Never waste quota again. Automatically wake up your AI models to maximize your daily limits.
 - **Fully Automatic**: Runs in the background via native system scheduler - no need to keep terminal or Antigravity open
 - **Native Cron Integration**: Schedule-based triggers (every N hours, daily, or custom cron)
-- **Smart Quota-Reset Detection**: Zero-waste mode that detects when quota resets
+- **Smart Quota-Reset Detection**: Compares cached snapshots to detect quota resets and trigger only when needed
+- **Selected Models Only**: Triggers only your configured models — no unnecessary API calls
 - **Multi-Account Support**: Trigger all your accounts simultaneously
-- **Built-in Safety**: Cooldown protection, retry logic, detailed history tracking
+- **Built-in Safety**: Deduplication via `cache.json`, detailed history tracking
 - **Platform Support**: Currently available on **macOS and Linux** (Windows support coming soon)
 
 See the [Wakeup Command](#antigravity-usage-wakeup-) section for full details.
@@ -166,12 +167,13 @@ Troubleshoot issues with your setup. Checks env vars, auth status, and local ser
 Quickly check if your auth tokens are valid or expired.
 
 ### `antigravity-usage wakeup` 🚀
-**Never waste quota again.** Automatically wake up your AI models at strategic times to maximize your daily limits.
+**Never waste quota again.** Automatically wake up your AI models when quota resets to maximize your daily limits.
 
 > **Platform Support:** Currently available on **macOS** and **Linux**. Windows support (via Task Scheduler) is coming soon.
 
 ```bash
 antigravity-usage wakeup config     # Interactive setup (takes 30 seconds)
+antigravity-usage wakeup trigger    # Run trigger (cron calls this)
 antigravity-usage wakeup install    # Install to native system cron
 antigravity-usage wakeup status     # Check configuration & next run
 antigravity-usage wakeup test       # Test trigger manually
@@ -179,46 +181,50 @@ antigravity-usage wakeup history    # View trigger history
 ```
 
 **Why This Matters:**
-Your Antigravity quota resets every ~5 hours, but if you don't use it, you lose it. The wakeup feature ensures you **automatically trigger** both Claude and Gemini models to keep your quota flowing.
+Your Antigravity quota resets periodically, but if you don't use it, you lose it. The wakeup feature ensures you **automatically trigger** models to keep your quota flowing.
 
 #### 🎯 Intelligent Model Selection
-Zero configuration needed. Automatically wakes up:
+Zero configuration needed. Default models cover all quota groups:
 - **`claude-sonnet-4-6`** → Triggers the entire Claude family
 - **`gemini-3-flash`** → Triggers Gemini flash quota group
 - **`gemini-3.1-pro-low`** → Triggers Gemini pro quota group
 
-All three models combined ensure comprehensive coverage and optimal quota utilization across all available AI models and quota groups.
+Only configured models are triggered — no unnecessary API calls.
 
 #### ⚡️ Two Powerful Trigger Modes
 
-**1. Schedule-Based** (Native Cron Integration)
+**1. Smart Quota-Reset Detection** (Recommended)
+The most intelligent trigger mode. Compares the current quota snapshot against the previous cached snapshot (`cache.json`) to detect when:
+- Model quota is at **100%** (unused)
+- `resetTime` has **changed** since last check (quota cycle has reset)
+
+When detected, it triggers only the selected models via the Google Cloud Code API. Run it periodically via cron to catch every reset.
+
+```bash
+antigravity-usage wakeup config
+# Select: "Quota-reset-based" mode
+
+antigravity-usage wakeup install
+# ✅ Installs cron job that runs `wakeup trigger` every 1 hour
+```
+
+**2. Schedule-Based** (Native Cron Integration)
 Runs locally on your machine with zero dependencies:
 - **Interval Mode**: Every N hours (e.g., every 6 hours)
 - **Daily Mode**: At specific times (e.g., 9 AM, 5 PM)
 - **Custom Mode**: Advanced cron expressions for power users
-- **Portable Design**: Auto-detects Node.js path for seamless operation across different machines
 
 ```bash
 antigravity-usage wakeup install
 # ✅ Installs to your system's native crontab (macOS/Linux)
-# ✅ Runs even when terminal/antigravity is closed
+# ✅ Runs even when terminal/Antigravity is closed
 # ✅ Persists across reboots
-# ✅ Works on any machine with Node.js installed
 ```
 
-**2. Smart Quota-Reset Detection** (Zero-Waste Mode)
-The most intelligent trigger mode. Automatically detects when:
-- Quota is at **100%** (unused)
-- Reset time is **~5 hours away** (just reset)
-- No cooldown conflicts
-
-When triggered, it wakes up **ALL** your accounts simultaneously, ensuring none of your quota goes to waste.
-
 #### 🛡️ Built-in Safety Features
-- **Cooldown Protection**: Prevents duplicate triggers (1-hour default)
-- **Multi-Account Support**: Trigger for specific accounts or all at once
-- **Detailed History**: Track every trigger with timestamps and results
-- **Graceful Failures**: Automatic retry logic with exponential backoff
+- **Deduplication**: Uses `cache.json` to prevent re-triggering the same reset cycle
+- **Multi-Account Support**: Triggers for all valid accounts simultaneously
+- **Detailed History**: Track every trigger with timestamps and results (up to 100 entries)
 - **Token Efficiency**: Minimal output tokens (just 1 token per request)
 
 #### 📊 Real-Time Monitoring

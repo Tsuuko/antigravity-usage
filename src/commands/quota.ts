@@ -70,6 +70,7 @@ async function fetchSingleAccountQuota(options: QuotaOptions): Promise<void> {
 
     try {
       debug('quota', `Fetching quota via ${method} method...`)
+
       const snapshot = await fetchQuota(method)
 
       // Cache the result if we have an account email

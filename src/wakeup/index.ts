@@ -15,17 +15,7 @@ export {
   addTriggerRecord,
   getRecentHistory,
   getLastTrigger,
-  clearTriggerHistory,
-  loadResetState,
-  saveResetState,
-  updateResetState,
-  getModelResetState,
-  clearResetState,
-  loadModelMapping,
-  saveModelMapping,
-  updateModelMapping,
-  getModelConstant,
-  getResetKey
+  clearTriggerHistory
 } from './storage.js'
 
 // Account Resolver
