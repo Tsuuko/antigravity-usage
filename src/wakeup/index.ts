@@ -15,7 +15,9 @@ export {
   addTriggerRecord,
   getRecentHistory,
   getLastTrigger,
-  clearTriggerHistory
+  clearTriggerHistory,
+  loadWakeupState,
+  saveWakeupState
 } from './storage.js'
 
 // Account Resolver

@@ -10,8 +10,7 @@
 import { debug } from '../core/logger.js'
 import type { QuotaSnapshot, ModelQuotaInfo } from '../quota/types.js'
 import { fetchQuota } from '../quota/service.js'
-import { loadWakeupConfig } from './storage.js'
-import { loadCache, saveCache } from '../accounts/index.js'
+import { loadWakeupConfig, loadWakeupState, saveWakeupState } from './storage.js'
 import { resolveAccounts } from './account-resolver.js'
 import { getAccountManager } from '../accounts/manager.js'
 import { executeTrigger } from './trigger-service.js'
@@ -114,14 +113,14 @@ export async function detectResetAndTrigger(): Promise<DetectionResult> {
       accountManager.setActiveAccount(accountEmail)
 
       // Load previous cache for this specific account
-      const previousSnapshot = loadCache(accountEmail)
+      const previousSnapshot = loadWakeupState(accountEmail)
 
       // Fetch fresh quota
       debug('reset-detector', `Fetching quota for ${accountEmail}...`)
       const snapshot = await fetchQuota('google')
 
       // Save new cache right away
-      saveCache(accountEmail, snapshot)
+      saveWakeupState(accountEmail, snapshot)
 
       const targetModels = snapshot.models.filter(m => selectedSet.has(m.modelId))
       debug('reset-detector', `${accountEmail}: Checking ${targetModels.length} selected models out of ${snapshot.models.length} total`)

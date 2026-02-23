@@ -12,6 +12,7 @@ import type {
   TriggerRecord
 } from './types.js'
 import { getDefaultConfig } from './types.js'
+import type { QuotaSnapshot } from '../quota/types.js'
 
 // Storage paths
 const WAKEUP_DIR_NAME = 'wakeup'
@@ -167,10 +168,39 @@ export function getLastTrigger(): TriggerRecord | null {
   return history.length > 0 ? history[0] : null
 }
 
+
 /**
  * Clear trigger history
  */
 export function clearTriggerHistory(): void {
   saveTriggerHistory([])
   debug('wakeup-storage', 'Cleared trigger history')
+}
+
+// ============================================================================
+// Wakeup State Operations
+// ============================================================================
+
+/**
+ * Get the filename for a specific account's wakeup state
+ */
+function getWakeupStateFileName(email: string): string {
+  // Sanitize email for filename
+  const safeName = email.replace(/[^a-zA-Z0-9.-]/g, '_')
+  return `state-${safeName}.json`
+}
+
+/**
+ * Load the last seen quota snapshot for the wakeup detector
+ */
+export function loadWakeupState(email: string): QuotaSnapshot | null {
+  return readJsonFile<QuotaSnapshot | null>(getWakeupStateFileName(email), null)
+}
+
+/**
+ * Save the quota snapshot so the wakeup detector can compare it next time
+ */
+export function saveWakeupState(email: string, snapshot: QuotaSnapshot): void {
+  writeJsonFile(getWakeupStateFileName(email), snapshot)
+  debug('wakeup-storage', `Saved wakeup state for ${email}`)
 }
