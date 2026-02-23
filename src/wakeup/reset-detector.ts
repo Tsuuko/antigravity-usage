@@ -14,7 +14,7 @@ import { loadWakeupConfig, loadWakeupState, saveWakeupState } from './storage.js
 import { resolveAccounts } from './account-resolver.js'
 import { getAccountManager } from '../accounts/manager.js'
 import { executeTrigger } from './trigger-service.js'
-import type { DetectionResult } from './types.js'
+import type { DetectionResult, WakeupState } from './types.js'
 
 // Smart trigger thresholds
 // Note: remainingPercentage is actually a fraction (0-1), not a percentage (0-100)
@@ -23,9 +23,9 @@ const FULL_QUOTA_THRESHOLD = 0.99        // Consider "full" if >= 99%
 /**
  * Check if a model is "unused" and should be triggered based on previous cache data
  *
- * Unused = 100% quota remaining AND resetTime is different from the previous cached snapshot
+ * Unused = 100% quota remaining AND resetTime is different from the previous cached state
  */
-export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnapshot | null): boolean {
+export function isModelUnused(model: ModelQuotaInfo, previousState: WakeupState | null): boolean {
   // Must have remaining percentage data
   if (model.remainingPercentage === undefined) {
     debug('reset-detector', `${model.modelId}: No remaining percentage data`)
@@ -44,28 +44,28 @@ export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnap
     return false
   }
 
-  // If no previous snapshot exists, this is the first run - trigger
-  if (!previousSnapshot) {
-    debug('reset-detector', `${model.modelId}: UNUSED - No previous snapshot (first run)`)
+  // If no previous state exists, this is the first run - trigger
+  if (!previousState) {
+    debug('reset-detector', `${model.modelId}: UNUSED - No previous state (first run)`)
     return true
   }
 
-  // Find the same model in the previous snapshot
-  const previousModel = previousSnapshot.models.find(m => m.modelId === model.modelId)
+  // Find the same model in the previous state
+  const previousResetTime = previousState[model.modelId]
 
-  // If model wasn't in previous snapshot, it's new - trigger
-  if (!previousModel) {
-    debug('reset-detector', `${model.modelId}: UNUSED - Model not in previous snapshot`)
+  // If model wasn't in previous state, it's new - trigger
+  if (!previousResetTime) {
+    debug('reset-detector', `${model.modelId}: UNUSED - Model not in previous state`)
     return true
   }
 
   // Compare resetTime: if changed, the quota cycle has reset
-  if (model.resetTime === previousModel.resetTime) {
+  if (model.resetTime === previousResetTime) {
     debug('reset-detector', `${model.modelId}: Reset time unchanged (${model.resetTime})`)
     return false
   }
 
-  debug('reset-detector', `${model.modelId}: UNUSED - Reset time changed (old: ${previousModel.resetTime}, new: ${model.resetTime})`)
+  debug('reset-detector', `${model.modelId}: UNUSED - Reset time changed (old: ${previousResetTime}, new: ${model.resetTime})`)
   return true
 }
 
@@ -74,7 +74,7 @@ export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnap
  * Detect unused models and trigger wake-up for all configured accounts.
  *
  * Iterates through selected accounts, fetches quota for each,
- * compares against its previous cached snapshot, and triggers if needed.
+ * compares against its previous cached state, and triggers if needed.
  */
 export async function detectResetAndTrigger(): Promise<DetectionResult> {
   debug('reset-detector', 'Checking for unused models (smart trigger)')
@@ -112,18 +112,24 @@ export async function detectResetAndTrigger(): Promise<DetectionResult> {
       // Temporarily set active account to fetch its specific quota
       accountManager.setActiveAccount(accountEmail)
 
-      // Load previous cache for this specific account
-      const previousSnapshot = loadWakeupState(accountEmail)
+      // Load previous state for this specific account
+      const previousState = loadWakeupState(accountEmail)
 
       // Fetch fresh quota
       debug('reset-detector', `Fetching quota for ${accountEmail}...`)
       const snapshot = await fetchQuota('google')
 
-      // Save new cache right away
-      saveWakeupState(accountEmail, snapshot)
-
       const targetModels = snapshot.models.filter(m => selectedSet.has(m.modelId))
       debug('reset-detector', `${accountEmail}: Checking ${targetModels.length} selected models out of ${snapshot.models.length} total`)
+
+      // Build and save new state right away
+      const newState: WakeupState = {}
+      for (const m of targetModels) {
+        if (m.resetTime) {
+          newState[m.modelId] = m.resetTime
+        }
+      }
+      saveWakeupState(accountEmail, newState)
 
       const modelsToTrigger: string[] = []
       const seenModelIds = new Set<string>()
@@ -131,7 +137,7 @@ export async function detectResetAndTrigger(): Promise<DetectionResult> {
       for (const model of targetModels) {
         if (seenModelIds.has(model.modelId)) continue
 
-        if (isModelUnused(model, previousSnapshot)) {
+        if (isModelUnused(model, previousState)) {
           modelsToTrigger.push(model.modelId)
         }
         seenModelIds.add(model.modelId)
@@ -185,13 +191,13 @@ export async function detectResetAndTrigger(): Promise<DetectionResult> {
 /**
  * Get list of unused models for display/testing
  */
-export function findUnusedModels(snapshot: QuotaSnapshot, previousSnapshot: QuotaSnapshot | null = null): ModelQuotaInfo[] {
-  return snapshot.models.filter(m => isModelUnused(m, previousSnapshot))
+export function findUnusedModels(snapshot: QuotaSnapshot, previousState: WakeupState | null = null): ModelQuotaInfo[] {
+  return snapshot.models.filter(m => isModelUnused(m, previousState))
 }
 
 /**
  * Check if any models need triggering (for status display)
  */
-export function hasUnusedModels(snapshot: QuotaSnapshot, previousSnapshot: QuotaSnapshot | null = null): boolean {
-  return snapshot.models.some(m => isModelUnused(m, previousSnapshot))
+export function hasUnusedModels(snapshot: QuotaSnapshot, previousState: WakeupState | null = null): boolean {
+  return snapshot.models.some(m => isModelUnused(m, previousState))
 }

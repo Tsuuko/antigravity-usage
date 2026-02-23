@@ -144,6 +144,16 @@ export interface TriggerResult {
 }
 
 // ============================================================================
+// State Types
+// ============================================================================
+
+/**
+ * Wakeup State for Quota-Reset mode
+ * Maps model ID to its last known quota resetTime
+ */
+export type WakeupState = Record<string, string>
+
+// ============================================================================
 // Cron Installer Types
 // ============================================================================
 

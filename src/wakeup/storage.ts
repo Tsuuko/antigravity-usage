@@ -6,13 +6,14 @@
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { debug } from '../core/logger.js'
-import { getConfigDir } from '../core/env.js'
+import { getConfigDir, getAccountDir } from '../core/env.js'
+import { ensureAccountDir } from '../accounts/storage.js'
 import type {
   WakeupConfig,
-  TriggerRecord
+  TriggerRecord,
+  WakeupState
 } from './types.js'
 import { getDefaultConfig } from './types.js'
-import type { QuotaSnapshot } from '../quota/types.js'
 
 // Storage paths
 const WAKEUP_DIR_NAME = 'wakeup'
@@ -182,25 +183,34 @@ export function clearTriggerHistory(): void {
 // ============================================================================
 
 /**
- * Get the filename for a specific account's wakeup state
+ * Get the path for a specific account's wakeup state
  */
-function getWakeupStateFileName(email: string): string {
-  // Sanitize email for filename
-  const safeName = email.replace(/[^a-zA-Z0-9.-]/g, '_')
-  return `state-${safeName}.json`
+function getWakeupStatePath(email: string): string {
+  return join(getAccountDir(email), 'wakeup-state.json')
 }
 
 /**
- * Load the last seen quota snapshot for the wakeup detector
+ * Load the last seen quota state for the wakeup detector
  */
-export function loadWakeupState(email: string): QuotaSnapshot | null {
-  return readJsonFile<QuotaSnapshot | null>(getWakeupStateFileName(email), null)
+export function loadWakeupState(email: string): WakeupState | null {
+  const path = getWakeupStatePath(email)
+  try {
+    if (existsSync(path)) {
+      const content = readFileSync(path, 'utf-8')
+      return JSON.parse(content) as WakeupState
+    }
+  } catch (err) {
+    debug('wakeup-storage', `Error reading state for ${email}:`, err)
+  }
+  return null
 }
 
 /**
- * Save the quota snapshot so the wakeup detector can compare it next time
+ * Save the quota state so the wakeup detector can compare it next time
  */
-export function saveWakeupState(email: string, snapshot: QuotaSnapshot): void {
-  writeJsonFile(getWakeupStateFileName(email), snapshot)
+export function saveWakeupState(email: string, state: WakeupState): void {
+  ensureAccountDir(email)
+  const path = getWakeupStatePath(email)
+  writeFileSync(path, JSON.stringify(state, null, 2))
   debug('wakeup-storage', `Saved wakeup state for ${email}`)
 }
