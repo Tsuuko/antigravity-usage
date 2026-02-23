@@ -10,7 +10,7 @@
 import { debug } from '../core/logger.js'
 import type { QuotaSnapshot, ModelQuotaInfo } from '../quota/types.js'
 import { loadWakeupConfig } from './storage.js'
-import { getAccountManager } from '../accounts/manager.js'
+import { resolveAccounts } from './account-resolver.js'
 import { executeTrigger } from './trigger-service.js'
 import type { DetectionResult } from './types.js'
 
@@ -67,18 +67,6 @@ export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnap
   return true
 }
 
-/**
- * Get all valid account emails
- */
-function getAllValidAccounts(): string[] {
-  const accountManager = getAccountManager()
-  const allEmails = accountManager.getAccountEmails()
-
-  return allEmails.filter(email => {
-    const status = accountManager.getAccountStatus(email)
-    return status === 'valid' || status === 'expired' // Expired can be refreshed
-  })
-}
 
 /**
  * Detect unused models and trigger wake-up for all accounts
@@ -102,14 +90,14 @@ export async function detectResetAndTrigger(
     return { triggered: false, triggeredModels: [] }
   }
 
-  // Get ALL valid accounts
-  const accounts = getAllValidAccounts()
+  // Respect selectedAccounts from config
+  const accounts = resolveAccounts(config.selectedAccounts)
   if (accounts.length === 0) {
     debug('reset-detector', 'No valid accounts available')
     return { triggered: false, triggeredModels: [] }
   }
 
-  debug('reset-detector', `Found ${accounts.length} valid accounts`)
+  debug('reset-detector', `Found ${accounts.length} account(s) (from selectedAccounts config)`)
 
   // Filter to only selected models
   const selectedSet = new Set(config.selectedModels)
