@@ -9,8 +9,11 @@
 
 import { debug } from '../core/logger.js'
 import type { QuotaSnapshot, ModelQuotaInfo } from '../quota/types.js'
+import { fetchQuota } from '../quota/service.js'
 import { loadWakeupConfig } from './storage.js'
+import { loadCache, saveCache } from '../accounts/index.js'
 import { resolveAccounts } from './account-resolver.js'
+import { getAccountManager } from '../accounts/manager.js'
 import { executeTrigger } from './trigger-service.js'
 import type { DetectionResult } from './types.js'
 
@@ -69,16 +72,12 @@ export function isModelUnused(model: ModelQuotaInfo, previousSnapshot: QuotaSnap
 
 
 /**
- * Detect unused models and trigger wake-up for all accounts
+ * Detect unused models and trigger wake-up for all configured accounts.
  *
- * Compares the new snapshot against the previous cached snapshot to detect resets.
- * @param snapshot - The newly fetched quota snapshot
- * @param previousSnapshot - The previous cached snapshot (from cache.json), or null if first run
+ * Iterates through selected accounts, fetches quota for each,
+ * compares against its previous cached snapshot, and triggers if needed.
  */
-export async function detectResetAndTrigger(
-  snapshot: QuotaSnapshot,
-  previousSnapshot: QuotaSnapshot | null
-): Promise<DetectionResult> {
+export async function detectResetAndTrigger(): Promise<DetectionResult> {
   debug('reset-detector', 'Checking for unused models (smart trigger)')
 
   // Load config
@@ -99,43 +98,56 @@ export async function detectResetAndTrigger(
 
   debug('reset-detector', `Found ${accounts.length} account(s) (from selectedAccounts config)`)
 
-  // Filter to only selected models
-  const selectedSet = new Set(config.selectedModels)
-  const targetModels = snapshot.models.filter(m => selectedSet.has(m.modelId))
-
-  debug('reset-detector', `Checking ${targetModels.length} selected models out of ${snapshot.models.length} total`)
-
-  // Find unused models by comparing with previous snapshot
-  const modelsToTrigger: string[] = []
-  const seenModelIds = new Set<string>()
-
-  for (const model of targetModels) {
-    // Skip duplicates
-    if (seenModelIds.has(model.modelId)) {
-      continue
-    }
-
-    // Check if model is unused (resetTime changed from cached version)
-    if (!isModelUnused(model, previousSnapshot)) {
-      continue
-    }
-
-    modelsToTrigger.push(model.modelId)
-    seenModelIds.add(model.modelId)
-  }
-
-  if (modelsToTrigger.length === 0) {
-    debug('reset-detector', 'No unused models to trigger')
-    return { triggered: false, triggeredModels: [] }
-  }
-
-  console.log(`\n🔄 Found ${modelsToTrigger.length} unused model(s): ${modelsToTrigger.join(', ')}`)
-  console.log(`   Triggering for ${accounts.length} account(s)...`)
-
-  // Trigger for ALL accounts
+  const accountManager = getAccountManager()
+  const originalActiveEmail = accountManager.getActiveEmail()
+  let anyTriggered = false
+  const allTriggeredModels = new Set<string>()
   let successCount = 0
+
+  const selectedSet = new Set(config.selectedModels)
+
   for (const accountEmail of accounts) {
     try {
+      debug('reset-detector', `\n--- Processing account: ${accountEmail} ---`)
+
+      // Temporarily set active account to fetch its specific quota
+      accountManager.setActiveAccount(accountEmail)
+
+      // Load previous cache for this specific account
+      const previousSnapshot = loadCache(accountEmail)
+
+      // Fetch fresh quota
+      debug('reset-detector', `Fetching quota for ${accountEmail}...`)
+      const snapshot = await fetchQuota('google')
+
+      // Save new cache right away
+      saveCache(accountEmail, snapshot)
+
+      const targetModels = snapshot.models.filter(m => selectedSet.has(m.modelId))
+      debug('reset-detector', `${accountEmail}: Checking ${targetModels.length} selected models out of ${snapshot.models.length} total`)
+
+      const modelsToTrigger: string[] = []
+      const seenModelIds = new Set<string>()
+
+      for (const model of targetModels) {
+        if (seenModelIds.has(model.modelId)) continue
+
+        if (isModelUnused(model, previousSnapshot)) {
+          modelsToTrigger.push(model.modelId)
+        }
+        seenModelIds.add(model.modelId)
+      }
+
+      if (modelsToTrigger.length === 0) {
+        debug('reset-detector', `${accountEmail}: No unused models to trigger`)
+        continue
+      }
+
+      console.log(`\n🔄 ${accountEmail}: Found ${modelsToTrigger.length} unused model(s): ${modelsToTrigger.join(', ')}`)
+      anyTriggered = true
+      modelsToTrigger.forEach((m: string) => allTriggeredModels.add(m))
+
+      // Trigger for this account
       const result = await executeTrigger({
         models: modelsToTrigger,
         accountEmail,
@@ -148,17 +160,26 @@ export async function detectResetAndTrigger(
       const modelSuccess = result.results.filter(r => r.success).length
       console.log(`   ✅ ${accountEmail}: ${modelSuccess}/${modelsToTrigger.length} succeeded`)
       if (modelSuccess > 0) successCount++
+
     } catch (err) {
       console.log(`   ❌ ${accountEmail}: ${err instanceof Error ? err.message : err}`)
       debug('reset-detector', `Trigger failed for ${accountEmail}:`, err)
     }
   }
 
-  console.log(`\n📊 Wake-up complete: ${successCount}/${accounts.length} accounts triggered\n`)
+  // Restore original active account
+  if (originalActiveEmail) {
+    debug('reset-detector', `Restoring active account to ${originalActiveEmail}`)
+    accountManager.setActiveAccount(originalActiveEmail)
+  }
+
+  if (anyTriggered) {
+    console.log(`\n📊 Wake-up complete: ${successCount}/${accounts.length} accounts triggered successfully\n`)
+  }
 
   return {
-    triggered: true,
-    triggeredModels: modelsToTrigger
+    triggered: anyTriggered,
+    triggeredModels: Array.from(allTriggeredModels)
   }
 }
 

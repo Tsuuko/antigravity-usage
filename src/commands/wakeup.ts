@@ -16,8 +16,6 @@ import {
   type TriggerRecord,
   getDefaultConfig
 } from '../wakeup/index.js'
-import { fetchQuota } from '../quota/service.js'
-import { loadCache, saveCache } from '../accounts/index.js'
 import {
   installCronJob,
   uninstallCronJob,
@@ -272,23 +270,11 @@ async function runScheduledTrigger(isScheduled: boolean): Promise<void> {
     return
   }
 
-  // Quota-reset mode: use detectResetAndTrigger with quota snapshot
+  // Quota-reset mode: use detectResetAndTrigger
   if (config.wakeOnReset) {
     debug('wakeup', 'Using quota-reset mode: fetching quota and detecting resets')
     try {
-      // Load previous cache for comparison
-      const accountManager = getAccountManager()
-      const activeEmail = accountManager.getActiveEmail()
-      const previousSnapshot = activeEmail ? loadCache(activeEmail) : null
-
-      const snapshot = await fetchQuota('google')
-
-      // Save new cache
-      if (activeEmail) {
-        saveCache(activeEmail, snapshot)
-      }
-
-      const result = await detectResetAndTrigger(snapshot, previousSnapshot)
+      const result = await detectResetAndTrigger()
       if (!result.triggered) {
         debug('wakeup', 'No models needed triggering')
       }
